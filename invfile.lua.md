@@ -621,14 +621,14 @@ After the preparatory steps have completed, we will read in the build list and
 attach all predefined, package specific tasks to the overall tasks:
 
     function afterPrepare()
-      for line in io.lines("data/build_list") do
-        if line ~= "" then
-         test 
+      for package in io.lines("data/build_list") do
+        if package ~= "" then
+         test
             .runTask('build:' .. package)
             .runTask('test:' .. package)
             .runTask('clean:' .. package)
 
-          deploy 
+          deploy
             .runTask('build:' .. package)
             .runTask('test:' .. package)
             .runTask('push:' .. package)
