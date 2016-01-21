@@ -6,7 +6,6 @@ subtitle: Containerized Packages in the Cloud
 author:
   - Jonas Weber
   - Björn Grüning
-toc: true
 ---
 
 # Introduction
@@ -110,7 +109,7 @@ checkable.
 
       local install = 'apk --root /data/dist'
       .. ' --update-cache --repository '
-      .. ' http://dl-4.alpinelinux.org/alpine/v3.2/main'
+      .. ' http://dl-4.alpinelinux.org/alpine/latest-stable/main'
       .. ' --keys-dir /etc/apk/keys --initdb add '
 
 After installation we have to extract some information from the package
@@ -356,7 +355,7 @@ ownership to `nobody`. This is necessary since the builder has to be run as
 `nobody`, but the output directory is only writeable by `root`.
 
       inv.task('build:' .. package)
-        .using('thriqon/linuxbrew-alpine')
+        .using('local_tools/linuxbrew_builder')
           .withConfig({user = "root"})
           .withHostConfig({binds = {builddir .. ':/data'}})
             .run('mkdir', '-p', '/data/info', '/data/dist')
@@ -389,7 +388,7 @@ the output files.
         .wrap(builddir .. '/dist').inImage('mwcampbell/muslbase-runtime')
           .at("/brew/").as(repo)
 
-## Cleaning up
+### Cleaning up
 
 This step removes all files generated during the run. It is run as the user `root`:
 
@@ -399,7 +398,7 @@ This step removes all files generated during the run. It is run as the user `roo
         .withHostConfig({binds = {builddir .. ':/data'}})
         .run('rm', '-rf', '/data/dist', '/data/info')
 
-## Testing
+### Testing
 
 Testing is similar to the other builders. The provided test is executed with a
 shell and the exit code is automatically checked.
@@ -612,9 +611,9 @@ package are generated using the builders.
 The tool can be used in two modes: In Local test mode and in deploy mode.
 Usually, local test mode is used when evaluating the compilability of pull
 requests, while deploy mode is reserved for commits on `master`. Appropriately,
-we define two tasks called `local` and `deploy`.
+we define two tasks called `test` and `deploy`.
 
-    test = inv.task('local')
+    test = inv.task('test')
     deploy = inv.task('deploy')
 
 After the preparatory steps have completed, we will read in the build list and
@@ -623,6 +622,7 @@ attach all predefined, package specific tasks to the overall tasks:
     function afterPrepare()
       for package in io.lines("data/build_list") do
         if package ~= "" then
+          print("Schedule ", package)
          test
             .runTask('build:' .. package)
             .runTask('test:' .. package)
@@ -762,18 +762,47 @@ is generated as follows:
       .using('busybox')
         .run('rm', '-rf', 'jq')
 
+Linuxbrew builder image
+
+    inv.task('main:generate_linuxbrew_builder')
+      .using('alpine')
+        .run('mkdir', '-p', 'linuxbrew-alpine/brew', 'linuxbrew-alpine/tmp')
+        .run('apk', '--root', '/source/linuxbrew-alpine',
+          '--update-cache', '--repository',
+          'http://dl-4.alpinelinux.org/alpine/latest-stable/main',
+          '--keys-dir', '/etc/apk/keys', '--initdb', 'add',
+          'git', 'make', 'clang', 'ruby', 'ruby-irb', 'ncurses-dev',
+          'tar', 'binutils', 'build-base', 'bash', 'perl',
+          'zlib', 'zlib-dev', 'jq', 'patch')
+
+        .run('/bin/sh', '-c',
+          'apk --update-cache add git && '
+          .. 'git clone https://github.com/Homebrew/linuxbrew linuxbrew-alpine/brew')
+        .run('cp', '-r', 'linuxbrew-alpine/brew/bin', 'linuxbrew-alpine/brew/orig_bin')
+        .run('/bin/sh', '-c',
+          'find linuxbrew-alpine/brew -print0 | xargs -0 -n 1 chown nobody:users')
+        .run('chown', 'nobody:users', 'linuxbrew-alpine/brew', 'linuxbrew-alpine/tmp')
+        .run('rm', '-rf', 'linuxbrew-alpine/lib/apk', 'linuxbrew-alpine/var/cache/apk/')
+      .wrap('linuxbrew-alpine').inImage('busybox:latest')
+        .at('/').as('local_tools/linuxbrew_builder')
+
+      .using('alpine')
+        .run('rm', '-rf', 'linuxbrew-alpine')
+
 This article can build itself!
 
-    inv.task('article')  
-      .using('thriqon/full-pandoc')  
+    inv.task('article')
+      .using('thriqon/full-pandoc')
         .run('pandoc',
           '--standalone',
+          '--toc',
+          '--toc-depth=2',
           '--indented-code-classes=lua',
           '--highlight-style=pygments',
           '-o', 'mulled.tex',
-          '-i', 'invfile.lua.md')  
-      .using('thriqon/xelatex-docker')  
-        .run('xelatex', 'mulled.tex')  
+          '-i', 'invfile.lua.md')
+      .using('thriqon/xelatex-docker')
+        .run('xelatex', 'mulled.tex')
 
 
 [^alpine-linux]: <http://www.alpinelinux.org/>

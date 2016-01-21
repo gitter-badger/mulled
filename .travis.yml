@@ -11,6 +11,7 @@ install:
   - chmod u+x involucro
 
 script:
+  - ./involucro -v main:generate_linuxbrew_builder > /dev/null
   - if [[ $TRAVIS_SECURE_ENV_VARS == "true" ]]; then docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD" quay.io ; fi
   - (if [ "$TRAVIS_PULL_REQUEST" = "false" -a "$TRAVIS_BRANCH" = "master" ]; then ./involucro -v main:prepare deploy ; else ./involucro -v main:prepare test ; fi) > /dev/null
 
